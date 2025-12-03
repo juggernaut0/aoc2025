@@ -31,7 +31,7 @@ const SOLUTIONS: [&dyn Solution; 12] = [
 ];
 
 fn main() {
-    aoc::run("2024", SOLUTIONS);
+    aoc::run("2025", SOLUTIONS);
 }
 
 #[cfg(test)]

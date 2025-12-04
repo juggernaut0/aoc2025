@@ -35,4 +35,4 @@ fn main() {
 }
 
 #[cfg(test)]
-aoc::generate_answer_tests!(SOLUTIONS);
+aoc::generate_answer_tests!(SOLUTIONS, 12);

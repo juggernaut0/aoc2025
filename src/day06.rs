@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 pub struct Solution;
 
 impl aoc::Solution for Solution {
@@ -54,16 +56,17 @@ impl aoc::Solution for Solution {
     }
 }
 
-fn transpose<T: Copy + Default>(matrix: &[Vec<T>]) -> Vec<Vec<T>> {
+#[allow(clippy::needless_range_loop)]
+fn transpose<V: Borrow<[T]>, T: Copy + Default>(matrix: &[V]) -> Vec<Vec<T>> {
     if matrix.is_empty() {
         return vec![];
     }
     let row_count = matrix.len();
-    let col_count = matrix[0].len();
+    let col_count = matrix[0].borrow().len();
     let mut transposed = vec![vec![T::default(); row_count]; col_count];
     for r in 0..row_count {
         for c in 0..col_count {
-            transposed[c][r] = matrix[r][c];
+            transposed[c][r] = matrix[r].borrow()[c];
         }
     }
     transposed

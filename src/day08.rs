@@ -53,7 +53,7 @@ impl Solver {
                 point_pairs.push((p, q));
             }
         }
-        point_pairs.sort_by_key(|(p, q)| p.dist(*q));
+        point_pairs.sort_by_key(|(p, q)| p.sq_dist(*q));
         point_pairs
     }
 

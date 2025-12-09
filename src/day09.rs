@@ -1,14 +1,11 @@
-use aoc::{Point, parse_lines_with};
+use aoc::{Point, parse_lines_with, pairs_without_dups};
 
 pub struct Solution;
 
 impl aoc::Solution for Solution {
     fn solve_1(&self, input: String) -> String {
         let points: Vec<Point<i64>> = parse_lines_with(&input, parse_point).collect();
-        points
-            .iter()
-            .copied()
-            .flat_map(|p| points.iter().copied().map(move |q| (p, q)))
+        pairs_without_dups(&points)
             .map(|(p, q)| ((p.0 - q.0).abs() + 1) * ((p.1 - q.1).abs() + 1))
             .max()
             .unwrap()
@@ -22,18 +19,8 @@ impl aoc::Solution for Solution {
 
         // a rectangle is interior if all edges are fully to one side of it
 
-        let mut max_area = 0;
-        for (i, p) in points.iter().copied().enumerate() {
-            for q in points[(i + 1)..].iter().copied() {
-                if p == q {
-                    continue;
-                }
-
-                let area = ((q.0 - p.0).abs() + 1) * ((q.1 - p.1).abs() + 1);
-                if area <= max_area {
-                    continue;
-                }
-
+        pairs_without_dups(&points)
+            .filter(|(p, q)| {
                 let min_x = p.0.min(q.0);
                 let max_x = p.0.max(q.0);
                 let min_y = p.1.min(q.1);
@@ -56,16 +43,12 @@ impl aoc::Solution for Solution {
                     }
                 });
 
-                if is_interior {
-                    log::info!("Found interior rectangle: {p:?} to {q:?} area {area}");
-                    if area > max_area {
-                        max_area = area;
-                    }
-                }
-            }
-        }
-
-        max_area.to_string()
+                is_interior
+            })
+            .map(|(p, q)| ((q.0 - p.0).abs() + 1) * ((q.1 - p.1).abs() + 1))
+            .max()
+            .unwrap()
+            .to_string()
     }
 }
 

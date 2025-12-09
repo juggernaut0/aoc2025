@@ -1,4 +1,4 @@
-use aoc::{Point3D, parse_lines_with};
+use aoc::{Point3D, parse_lines_with, pairs_without_dups};
 use std::collections::{HashMap, HashSet};
 
 pub struct Solution;
@@ -47,12 +47,9 @@ impl Solver {
     }
 
     fn point_pairs(&self) -> Vec<(Point3D, Point3D)> {
-        let mut point_pairs: Vec<(Point3D, Point3D)> = Vec::new();
-        for (i, &p) in self.points.iter().enumerate() {
-            for &q in &self.points[(i + 1)..] {
-                point_pairs.push((p, q));
-            }
-        }
+        let mut point_pairs: Vec<(Point3D, Point3D)> = pairs_without_dups(&self.points)
+            .map(|t| (*t.0, *t.1))
+            .collect();
         point_pairs.sort_by_key(|(p, q)| p.sq_dist(*q));
         point_pairs
     }

@@ -1,10 +1,10 @@
-use aoc::{Point, parse_lines_with, pairs_without_dups};
+use aoc::{Point, pairs_without_dups, parse_lines};
 
 pub struct Solution;
 
 impl aoc::Solution for Solution {
     fn solve_1(&self, input: String) -> String {
-        let points: Vec<Point<i64>> = parse_lines_with(&input, parse_point).collect();
+        let points: Vec<Point<i64>> = parse_lines(&input).collect();
         pairs_without_dups(&points)
             .map(|(p, q)| ((p.0 - q.0).abs() + 1) * ((p.1 - q.1).abs() + 1))
             .max()
@@ -13,7 +13,7 @@ impl aoc::Solution for Solution {
     }
 
     fn solve_2(&self, input: String) -> String {
-        let points: Vec<Point<i64>> = parse_lines_with(&input, parse_point).collect();
+        let points: Vec<Point<i64>> = parse_lines(&input).collect();
         let mut edges: Vec<_> = points.windows(2).map(|ps| (ps[0], ps[1])).collect();
         edges.push((points[points.len() - 1], points[0]));
 
@@ -25,7 +25,7 @@ impl aoc::Solution for Solution {
                 let max_x = p.0.max(q.0);
                 let min_y = p.1.min(q.1);
                 let max_y = p.1.max(q.1);
-                let is_interior = edges.iter().all(|&(edge_start, edge_end)| {
+                edges.iter().all(|&(edge_start, edge_end)| {
                     if edge_start.0 <= min_x && edge_end.0 <= min_x {
                         // left
                         true
@@ -41,20 +41,11 @@ impl aoc::Solution for Solution {
                     } else {
                         false
                     }
-                });
-
-                is_interior
+                })
             })
             .map(|(p, q)| ((q.0 - p.0).abs() + 1) * ((q.1 - p.1).abs() + 1))
             .max()
             .unwrap()
             .to_string()
     }
-}
-
-fn parse_point(line: &str) -> Point<i64> {
-    let mut parts = line.split(',');
-    let x = parts.next().unwrap().parse().unwrap();
-    let y = parts.next().unwrap().parse().unwrap();
-    Point(x, y)
 }

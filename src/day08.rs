@@ -1,4 +1,4 @@
-use aoc::{Point3D, parse_lines_with, pairs_without_dups};
+use aoc::{Point3D, pairs_without_dups, parse_lines_with};
 use std::collections::{HashMap, HashSet};
 
 pub struct Solution;

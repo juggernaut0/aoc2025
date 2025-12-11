@@ -2,6 +2,10 @@ use std::borrow::Cow;
 use std::collections::{HashSet, VecDeque};
 use std::str::FromStr;
 use aoc::parse_lines;
+use num_rational::Rational32;
+
+const ZERO: Rational32 = Rational32::ZERO;
+const ONE: Rational32 = Rational32::ONE;
 
 pub struct Solution;
 
@@ -65,11 +69,11 @@ impl Machine {
 
     fn solve_part_2(&self) -> i32 {
         log::info!("starting solve_part_2 for joltage target {:?}", self.joltage_target);
-        let mut m = vec![vec![0f64; self.buttons.len() + 1]; self.joltage_target.len()];
+        let mut m = vec![vec![ZERO; self.buttons.len() + 1]; self.joltage_target.len()];
         for y in 0..self.joltage_target.len() {
             for (x, button) in self.buttons.iter().enumerate() {
                 if button.contains(&y) {
-                    m[y][x] = 1.0;
+                    m[y][x] = ONE;
                 }
             }
         }
@@ -77,14 +81,16 @@ impl Machine {
             m[y][self.buttons.len()] = target.into();
         }
 
-        log::info!("matrix before elimination: {:?}", m);
+        log::info!("matrix before elimination:");
+        pretty_print_matrix(&m);
 
         gaussian_elimination(&mut m);
 
-        log::info!("matrix after elimination: {:?}", m);
+        log::info!("matrix after elimination:");
+        pretty_print_matrix(&m);
 
         // remove empty rows if present
-        m.retain(|row| row[..self.buttons.len()].iter().any(|&val| val != 0.0));
+        m.retain(|row| row[..self.buttons.len()].iter().any(|&val| val != ZERO));
 
         let mut pivot_cols: Vec<usize> = vec![];
         let mut free_vars: Vec<usize> = vec![];
@@ -113,16 +119,24 @@ impl Machine {
                 let mut max_val = i32::MAX;
                 for row in &m {
                     let v = row[var];
-                    if v == 0.0 {
+                    if v == ZERO {
                         continue
                     }
+                    let row_nonzero_count = row[..self.buttons.len()]
+                        .iter()
+                        .filter(|&&val| val != ZERO)
+                        .count();
+                    if row_nonzero_count > 2 {
+                        continue; // cannot determine bound from this row
+                    }
                     let last_col = row[self.buttons.len()];
-                    if last_col > 0.0 && v > 0.0 {
+                    if last_col > ZERO && v > ZERO {
                         max_val = max_val.min(try_into_i32((last_col / v).floor()).unwrap());
                     }
                 }
                 if max_val == i32::MAX {
-                    panic!("unable to determine range for free variable at column {}", var);
+                    log::warn!("unable to determine range for free variable at column {}", var);
+                    max_val = 100; // arbitrary limit to avoid infinite search
                 }
                 var_ranges.push((var, 0, max_val));
             }
@@ -187,7 +201,9 @@ impl Machine {
     }
 }
 
-fn gaussian_elimination(m: &mut Vec<Vec<f64>>) {
+type Matrix = Vec<Vec<Rational32>>;
+
+fn gaussian_elimination(m: &mut Matrix) {
     let rows = m.len();
     let cols = m[0].len();
     let mut r = 0;
@@ -196,7 +212,7 @@ fn gaussian_elimination(m: &mut Vec<Vec<f64>>) {
             break;
         }
         let mut pivot = r;
-        while pivot < rows && m[pivot][c] == 0.0 {
+        while pivot < rows && m[pivot][c] == ZERO {
             pivot += 1;
         }
         if pivot == rows {
@@ -207,7 +223,7 @@ fn gaussian_elimination(m: &mut Vec<Vec<f64>>) {
         }
         m.swap(r, pivot);
         log::debug!("intermediate matrix at row {}, col {}: {:?}", r, c, m);
-        if m[r][c] != 1.0 {
+        if m[r][c] != ONE {
             let div = m[r][c];
             log::debug!("dividing row {} by {}", r, div);
             for j in c..cols {
@@ -216,11 +232,12 @@ fn gaussian_elimination(m: &mut Vec<Vec<f64>>) {
             log::debug!("intermediate matrix after div: {:?}", m);
         }
         for i in 0..rows {
-            if i != r && m[i][c] != 0.0 {
+            if i != r && m[i][c] != ZERO {
                 log::debug!("eliminating row {} using row {}", i, r);
                 let mul = m[i][c];
                 for j in c..cols {
-                    m[i][j] -= mul * m[r][j];
+                    let mrj = m[r][j];
+                    m[i][j] -= mul * mrj;
                 }
             }
         }
@@ -228,25 +245,25 @@ fn gaussian_elimination(m: &mut Vec<Vec<f64>>) {
     }
 }
 
-fn is_pivot_col(m: &Vec<Vec<f64>>, col: usize) -> bool {
-    let num_ones = m.iter().filter(|row| row[col] == 1.0).count();
+fn is_pivot_col(m: &Matrix, col: usize) -> bool {
+    let num_ones = m.iter().filter(|row| row[col] == ONE).count();
     if num_ones != 1 {
         return false;
     }
-    let num_nonzeros = m.iter().filter(|row| row[col] != 0.0).count();
+    let num_nonzeros = m.iter().filter(|row| row[col] != ZERO).count();
     num_nonzeros == 1
 }
 
 // returns adjusted last column after applying free vars
-fn apply_free_vars(m: &Vec<Vec<f64>>, free_vars: &[(usize, i32)]) -> Option<Vec<i32>> {
+fn apply_free_vars(m: &Matrix, free_vars: &[(usize, i32)]) -> Option<Vec<i32>> {
     //log::debug!("applying free vars {:?} to matrix {:?}", free_vars, m);
     let width = m[0].len();
     let mut result = vec![];
 
     for row in m {
-        let mut adjustment = 0.0;
+        let mut adjustment = ZERO;
         for &(var_idx, var_value) in free_vars {
-            adjustment += row[var_idx] * f64::from(var_value);
+            adjustment += row[var_idx] * Rational32::from(var_value);
         }
         result.push(try_into_i32(row[width - 1] - adjustment).ok()?);
     }
@@ -254,15 +271,20 @@ fn apply_free_vars(m: &Vec<Vec<f64>>, free_vars: &[(usize, i32)]) -> Option<Vec<
     Some(result)
 }
 
-fn try_into_i32(f: f64) -> Result<i32, Cow<'static, str>> {
-    if f.fract() != 0.0 {
+fn pretty_print_matrix(m: &Matrix) {
+    if log::log_enabled!(log::Level::Info) {
+        for row in m {
+            let row_str: Vec<String> = row.iter().map(|val| format!("{:>8}", val)).collect();
+            log::info!("{}", row_str.join(" "));
+        }
+    }
+}
+
+fn try_into_i32(f: Rational32) -> Result<i32, Cow<'static, str>> {
+    if !f.is_integer() {
         return Err(format!("value {} is not an integer", f).into());
     }
-    let i = f as i64;
-    if i < i32::MIN as i64 || i > i32::MAX as i64 {
-        return Err(format!("value {} is out of i32 range", f).into());
-    }
-    Ok(i as i32)
+    Ok(f.to_integer())
 }
 
 impl FromStr for Machine {

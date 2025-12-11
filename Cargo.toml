@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 aoc = { path = "../aoc" }
 log = "0.4.28"
+num-rational = "0.4.2"

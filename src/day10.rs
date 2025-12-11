@@ -16,7 +16,7 @@ impl aoc::Solution for Solution {
     fn solve_2(&self, input: String) -> String {
         parse_lines(&input)
             .map(|machine: Machine| machine.solve_part_2())
-            .sum::<i64>()
+            .sum::<i32>()
             .to_string()
     }
 }
@@ -63,18 +63,18 @@ impl Machine {
         }
     }
 
-    fn solve_part_2(&self) -> i64 {
+    fn solve_part_2(&self) -> i32 {
         log::info!("starting solve_part_2 for joltage target {:?}", self.joltage_target);
-        let mut m = vec![vec![0i64; self.buttons.len() + 1]; self.joltage_target.len()];
+        let mut m = vec![vec![0f64; self.buttons.len() + 1]; self.joltage_target.len()];
         for y in 0..self.joltage_target.len() {
             for (x, button) in self.buttons.iter().enumerate() {
                 if button.contains(&y) {
-                    m[y][x] = 1;
+                    m[y][x] = 1.0;
                 }
             }
         }
         for (y, &target) in self.joltage_target.iter().enumerate() {
-            m[y][self.buttons.len()] = target as i64;
+            m[y][self.buttons.len()] = target.into();
         }
 
         log::info!("matrix before elimination: {:?}", m);
@@ -84,21 +84,23 @@ impl Machine {
         log::info!("matrix after elimination: {:?}", m);
 
         // remove empty rows if present
-        m.retain(|row| row[..self.buttons.len()].iter().any(|&val| val != 0));
+        m.retain(|row| row[..self.buttons.len()].iter().any(|&val| val != 0.0));
 
         let mut pivot_cols: Vec<usize> = vec![];
         let mut free_vars: Vec<usize> = vec![];
         for c in 0..self.buttons.len() {
-            if m.iter().filter(|row| row[c] == 1).count() == 1 {
+            if is_pivot_col(&m, c) {
                 pivot_cols.push(c);
             } else {
                 free_vars.push(c);
             }
         }
 
-        let presses: Vec<i64> = if free_vars.is_empty() {
+        let presses: Vec<i32> = if free_vars.is_empty() {
             log::info!("Unique solution found");
-            m.iter().map(|row| row[self.buttons.len()]).collect()
+            m.iter()
+                .map(|row| try_into_i32(row[self.buttons.len()]).unwrap())
+                .collect()
         } else {
             log::info!("Free variables found at columns {:?}", free_vars);
             if free_vars.len() + m.len() != self.buttons.len() {
@@ -108,42 +110,45 @@ impl Machine {
             let mut var_ranges = vec![];
             for var in free_vars {
                 // determine possible range of var
-                let mut min_val = 0;
-                let mut max_val = i64::MAX;
+                let mut max_val = i32::MAX;
                 for row in &m {
                     let v = row[var];
-                    if v == 0 {
+                    if v == 0.0 {
                         continue
                     }
                     let last_col = row[self.buttons.len()];
-                    if last_col > 0 {
-                        max_val = max_val.min(last_col / v);
-                    } else {
-                        min_val = min_val.max(last_col / v);
+                    if last_col > 0.0 && v > 0.0 {
+                        max_val = max_val.min(try_into_i32((last_col / v).floor()).unwrap());
                     }
                 }
-                var_ranges.push((var, min_val, max_val));
+                if max_val == i32::MAX {
+                    panic!("unable to determine range for free variable at column {}", var);
+                }
+                var_ranges.push((var, 0, max_val));
             }
+            log::info!("Free variable ranges: {var_ranges:?}");
 
             // try combinations of free vars within their ranges to find minimal solution
-            let mut best_solution: Option<Vec<i64>> = None;
-            let mut best_total = i64::MAX;
+            let mut best_solution: Option<Vec<i32>> = None;
+            let mut best_total = i32::MAX;
             let mut vars_values = var_ranges.iter().map(|(i, min, _)| (*i, *min)).collect::<Vec<_>>();
             loop {
-                let mut candidate_solution = vec![0i64; self.buttons.len()];
-                for (i, b) in pivot_cols.iter()
-                    .copied()
-                    .zip(apply_free_vars(&m, &vars_values))
-                    .chain(vars_values.iter().copied()) {
-                    candidate_solution[i] = b;
-                }
+                let mut candidate_solution = vec![0i32; self.buttons.len()];
+                if let Some(adjusted_last_col) = apply_free_vars(&m, &vars_values) {
+                    for (i, b) in pivot_cols.iter()
+                        .copied()
+                        .zip(adjusted_last_col)
+                        .chain(vars_values.iter().copied()) {
+                        candidate_solution[i] = b;
+                    }
 
-                let valid = candidate_solution.iter().all(|p| *p >= 0);
-                if valid {
-                    let total: i64 = candidate_solution.iter().sum();
-                    if total < best_total {
-                        best_total = total;
-                        best_solution = Some(candidate_solution);
+                    let valid = candidate_solution.iter().all(|p| *p >= 0);
+                    if valid {
+                        let total: i32 = candidate_solution.iter().sum();
+                        if total < best_total {
+                            best_total = total;
+                            best_solution = Some(candidate_solution);
+                        }
                     }
                 }
 
@@ -164,7 +169,7 @@ impl Machine {
                 }
             }
 
-            best_solution.unwrap()
+            best_solution.expect("did not find any valid solution")
         };
 
         // simulate presses to verify
@@ -182,7 +187,7 @@ impl Machine {
     }
 }
 
-fn gaussian_elimination(m: &mut Vec<Vec<i64>>) {
+fn gaussian_elimination(m: &mut Vec<Vec<f64>>) {
     let rows = m.len();
     let cols = m[0].len();
     let mut r = 0;
@@ -191,7 +196,7 @@ fn gaussian_elimination(m: &mut Vec<Vec<i64>>) {
             break;
         }
         let mut pivot = r;
-        while pivot < rows && m[pivot][c] == 0 {
+        while pivot < rows && m[pivot][c] == 0.0 {
             pivot += 1;
         }
         if pivot == rows {
@@ -202,19 +207,16 @@ fn gaussian_elimination(m: &mut Vec<Vec<i64>>) {
         }
         m.swap(r, pivot);
         log::debug!("intermediate matrix at row {}, col {}: {:?}", r, c, m);
-        if m[r][c] != 1 {
+        if m[r][c] != 1.0 {
             let div = m[r][c];
             log::debug!("dividing row {} by {}", r, div);
             for j in c..cols {
-                if m[r][j] % div != 0 {
-                    panic!("cannot perform elimination with non-integer result");
-                }
                 m[r][j] /= div;
             }
             log::debug!("intermediate matrix after div: {:?}", m);
         }
         for i in 0..rows {
-            if i != r && m[i][c] != 0 {
+            if i != r && m[i][c] != 0.0 {
                 log::debug!("eliminating row {} using row {}", i, r);
                 let mul = m[i][c];
                 for j in c..cols {
@@ -226,20 +228,41 @@ fn gaussian_elimination(m: &mut Vec<Vec<i64>>) {
     }
 }
 
+fn is_pivot_col(m: &Vec<Vec<f64>>, col: usize) -> bool {
+    let num_ones = m.iter().filter(|row| row[col] == 1.0).count();
+    if num_ones != 1 {
+        return false;
+    }
+    let num_nonzeros = m.iter().filter(|row| row[col] != 0.0).count();
+    num_nonzeros == 1
+}
+
 // returns adjusted last column after applying free vars
-fn apply_free_vars(m: &Vec<Vec<i64>>, free_vars: &[(usize, i64)]) -> Vec<i64> {
+fn apply_free_vars(m: &Vec<Vec<f64>>, free_vars: &[(usize, i32)]) -> Option<Vec<i32>> {
+    //log::debug!("applying free vars {:?} to matrix {:?}", free_vars, m);
     let width = m[0].len();
     let mut result = vec![];
 
     for row in m {
-        let mut adjustment = 0;
+        let mut adjustment = 0.0;
         for &(var_idx, var_value) in free_vars {
-            adjustment += row[var_idx] * var_value;
+            adjustment += row[var_idx] * f64::from(var_value);
         }
-        result.push(row[width - 1] - adjustment);
+        result.push(try_into_i32(row[width - 1] - adjustment).ok()?);
     }
 
-    result
+    Some(result)
+}
+
+fn try_into_i32(f: f64) -> Result<i32, Cow<'static, str>> {
+    if f.fract() != 0.0 {
+        return Err(format!("value {} is not an integer", f).into());
+    }
+    let i = f as i64;
+    if i < i32::MIN as i64 || i > i32::MAX as i64 {
+        return Err(format!("value {} is out of i32 range", f).into());
+    }
+    Ok(i as i32)
 }
 
 impl FromStr for Machine {
@@ -296,19 +319,19 @@ mod tests {
         init_test_logging();
 
         let mut m = vec![
-            vec![1, 1, 1, 1, 0, 1, 0, 46],
-            vec![0, 1, 1, 1, 0, 0, 0, 29],
-            vec![1, 1, 1, 0, 1, 1, 0, 59],
-            vec![1, 0, 0, 0, 0, 0, 1, 22],
-            vec![0, 1, 0, 1, 1, 1, 1, 64],
+            vec![1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0, 46.0],
+            vec![0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 29.0],
+            vec![1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 59.0],
+            vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 22.0],
+            vec![0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 64.0],
         ];
         gaussian_elimination(&mut m);
         let expected = vec![
-            vec![1,  0,  0,  0,  0,  0,  1,  22],
-            vec![0,  1,  0,  0,  2,  0,  2,  82],
-            vec![0,  0,  1,  0, -1,  0, -2, -40],
-            vec![0,  0,  0,  1, -1,  0,  0, -13],
-            vec![0,  0,  0,  0,  0,  1, -1,  -5],
+            vec![1.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1.0,  22.0],
+            vec![0.0,  1.0,  0.0,  0.0,  2.0,  0.0,  2.0,  82.0],
+            vec![0.0,  0.0,  1.0,  0.0, -1.0,  0.0, -2.0, -40.0],
+            vec![0.0,  0.0,  0.0,  1.0, -1.0,  0.0,  0.0, -13.0],
+            vec![0.0,  0.0,  0.0,  0.0,  0.0,  1.0, -1.0,  -5.0],
         ];
         assert_eq!(m, expected);
     }

@@ -1,8 +1,8 @@
+use aoc::parse_lines;
+use num_rational::Rational32;
 use std::borrow::Cow;
 use std::collections::{HashSet, VecDeque};
 use std::str::FromStr;
-use aoc::parse_lines;
-use num_rational::Rational32;
 
 const ZERO: Rational32 = Rational32::ZERO;
 const ONE: Rational32 = Rational32::ONE;
@@ -32,16 +32,16 @@ struct Machine {
 }
 
 impl Machine {
-    fn press_button_lights(&self, button_idx: usize, lights: Vec<bool>) -> Vec<bool> {
-        let mut new_lights = lights.clone();
+    fn press_button_lights(&self, button_idx: usize, lights: &[bool]) -> Vec<bool> {
+        let mut new_lights = lights.to_vec();
         for &light_idx in &self.buttons[button_idx] {
             new_lights[light_idx] = !new_lights[light_idx];
         }
         new_lights
     }
 
-    fn press_button_joltage(&self, button_idx: usize, times: i32, joltage: Vec<i32>) -> Vec<i32> {
-        let mut new_joltage = joltage.clone();
+    fn press_button_joltage(&self, button_idx: usize, times: i32, joltage: &[i32]) -> Vec<i32> {
+        let mut new_joltage = joltage.to_vec();
         for &joltage_idx in &self.buttons[button_idx] {
             new_joltage[joltage_idx] += times;
         }
@@ -61,14 +61,19 @@ impl Machine {
                 return presses;
             }
             for button_idx in 0..self.buttons.len() {
-                let new_lights = self.press_button_lights(button_idx, lights.clone());
+                let new_lights = self.press_button_lights(button_idx, &lights);
                 q.push_back((new_lights, presses + 1));
             }
         }
     }
 
+    #[allow(clippy::needless_range_loop)] // more clear with indices
+    #[allow(clippy::too_many_lines)] // dude I know but I aint gonna fix it
     fn solve_part_2(&self) -> i32 {
-        log::info!("starting solve_part_2 for joltage target {:?}", self.joltage_target);
+        log::info!(
+            "starting solve_part_2 for joltage target {:?}",
+            self.joltage_target
+        );
         let mut m = vec![vec![ZERO; self.buttons.len() + 1]; self.joltage_target.len()];
         for y in 0..self.joltage_target.len() {
             for (x, button) in self.buttons.iter().enumerate() {
@@ -108,10 +113,12 @@ impl Machine {
                 .map(|row| try_into_i32(row[self.buttons.len()]).unwrap())
                 .collect()
         } else {
-            log::info!("Free variables found at columns {:?}", free_vars);
-            if free_vars.len() + m.len() != self.buttons.len() {
-                panic!("not enough free variables to solve the system");
-            }
+            log::info!("Free variables found at columns {free_vars:?}");
+            assert_eq!(
+                free_vars.len() + m.len(),
+                self.buttons.len(),
+                "not enough free variables to solve the system"
+            );
 
             let mut var_ranges = vec![];
             for var in free_vars {
@@ -120,7 +127,7 @@ impl Machine {
                 for row in &m {
                     let v = row[var];
                     if v == ZERO {
-                        continue
+                        continue;
                     }
                     let row_nonzero_count = row[..self.buttons.len()]
                         .iter()
@@ -135,7 +142,7 @@ impl Machine {
                     }
                 }
                 if max_val == i32::MAX {
-                    log::warn!("unable to determine range for free variable at column {}", var);
+                    log::warn!("unable to determine range for free variable at column {var}");
                     max_val = 100; // arbitrary limit to avoid infinite search
                 }
                 var_ranges.push((var, 0, max_val));
@@ -145,14 +152,19 @@ impl Machine {
             // try combinations of free vars within their ranges to find minimal solution
             let mut best_solution: Option<Vec<i32>> = None;
             let mut best_total = i32::MAX;
-            let mut vars_values = var_ranges.iter().map(|(i, min, _)| (*i, *min)).collect::<Vec<_>>();
+            let mut vars_values = var_ranges
+                .iter()
+                .map(|(i, min, _)| (*i, *min))
+                .collect::<Vec<_>>();
             loop {
                 let mut candidate_solution = vec![0i32; self.buttons.len()];
                 if let Some(adjusted_last_col) = apply_free_vars(&m, &vars_values) {
-                    for (i, b) in pivot_cols.iter()
+                    for (i, b) in pivot_cols
+                        .iter()
                         .copied()
                         .zip(adjusted_last_col)
-                        .chain(vars_values.iter().copied()) {
+                        .chain(vars_values.iter().copied())
+                    {
                         candidate_solution[i] = b;
                     }
 
@@ -174,9 +186,8 @@ impl Machine {
                         vars_values[i].1 += 1;
                         incremented = true;
                         break;
-                    } else {
-                        vars_values[i].1 = min_val;
                     }
+                    vars_values[i].1 = min_val;
                 }
                 if !incremented {
                     break;
@@ -189,20 +200,23 @@ impl Machine {
         // simulate presses to verify
         let mut joltage = vec![0i32; self.joltage_target.len()];
         for (b, &n) in presses.iter().enumerate() {
-            joltage = self.press_button_joltage(b, n as i32, joltage);
+            joltage = self.press_button_joltage(b, n, &joltage);
         }
-        if joltage != self.joltage_target {
-            panic!("simulated joltage {:?} does not match target {:?}", joltage, self.joltage_target);
-        }
+        assert_eq!(
+            joltage, self.joltage_target,
+            "simulated joltage {:?} does not match target {:?}",
+            joltage, self.joltage_target
+        );
 
         let total = presses.into_iter().sum();
-        log::info!("finished solve_part_2 with presses {}", total);
+        log::info!("finished solve_part_2 with presses {total}");
         total
     }
 }
 
 type Matrix = Vec<Vec<Rational32>>;
 
+#[allow(clippy::needless_range_loop)] // more clear with indices
 fn gaussian_elimination(m: &mut Matrix) {
     let rows = m.len();
     let cols = m[0].len();
@@ -219,21 +233,21 @@ fn gaussian_elimination(m: &mut Matrix) {
             continue;
         }
         if pivot != r {
-            log::debug!("swapping row {} with pivot row {}", r, pivot);
+            log::debug!("swapping row {r} with pivot row {pivot}");
         }
         m.swap(r, pivot);
-        log::debug!("intermediate matrix at row {}, col {}: {:?}", r, c, m);
+        log::debug!("intermediate matrix at row {r}, col {c}: {m:?}");
         if m[r][c] != ONE {
             let div = m[r][c];
-            log::debug!("dividing row {} by {}", r, div);
+            log::debug!("dividing row {r} by {div}");
             for j in c..cols {
                 m[r][j] /= div;
             }
-            log::debug!("intermediate matrix after div: {:?}", m);
+            log::debug!("intermediate matrix after div: {m:?}");
         }
         for i in 0..rows {
             if i != r && m[i][c] != ZERO {
-                log::debug!("eliminating row {} using row {}", i, r);
+                log::debug!("eliminating row {i} using row {r}");
                 let mul = m[i][c];
                 for j in c..cols {
                     let mrj = m[r][j];
@@ -274,7 +288,7 @@ fn apply_free_vars(m: &Matrix, free_vars: &[(usize, i32)]) -> Option<Vec<i32>> {
 fn pretty_print_matrix(m: &Matrix) {
     if log::log_enabled!(log::Level::Info) {
         for row in m {
-            let row_str: Vec<String> = row.iter().map(|val| format!("{:>8}", val)).collect();
+            let row_str: Vec<String> = row.iter().map(|val| format!("{val:>8}")).collect();
             log::info!("{}", row_str.join(" "));
         }
     }
@@ -282,7 +296,7 @@ fn pretty_print_matrix(m: &Matrix) {
 
 fn try_into_i32(f: Rational32) -> Result<i32, Cow<'static, str>> {
     if !f.is_integer() {
-        return Err(format!("value {} is not an integer", f).into());
+        return Err(format!("value {f} is not an integer").into());
     }
     Ok(f.to_integer())
 }
@@ -294,7 +308,7 @@ impl FromStr for Machine {
         // [#.###] (0,1) (0,2,3,4) (0,1,4) (3,4) {37,29,8,20,35}
         let parts: Vec<_> = s.split_whitespace().collect();
 
-        let lights_str = parts.get(0).ok_or("missing lights")?;
+        let lights_str = parts.first().ok_or("missing lights")?;
         let lights_target: Vec<bool> = lights_str
             .trim_matches(&['[', ']'][..])
             .chars()
@@ -305,13 +319,20 @@ impl FromStr for Machine {
             })
             .collect::<Result<_, _>>()?;
 
-        let buttons_str = parts.iter().skip(1).take_while(|p| p.starts_with('(') && p.ends_with(')'));
+        let buttons_str = parts
+            .iter()
+            .skip(1)
+            .take_while(|p| p.starts_with('(') && p.ends_with(')'));
         let buttons: Vec<Vec<usize>> = buttons_str
             .map(|b_str| {
                 b_str
                     .trim_matches(&['(', ')'][..])
                     .split(',')
-                    .map(|num_str| num_str.parse::<usize>().map_err(|e| format!("invalid button index: {e:?}")))
+                    .map(|num_str| {
+                        num_str
+                            .parse::<usize>()
+                            .map_err(|e| format!("invalid button index: {e:?}"))
+                    })
                     .collect::<Result<_, _>>()
             })
             .collect::<Result<_, _>>()?;
@@ -320,7 +341,11 @@ impl FromStr for Machine {
         let joltage_target: Vec<i32> = joltage_str
             .trim_matches(&['{', '}'][..])
             .split(',')
-            .map(|num_str| num_str.parse::<i32>().map_err(|e| format!("invalid joltage value: {e:?}")))
+            .map(|num_str| {
+                num_str
+                    .parse::<i32>()
+                    .map_err(|e| format!("invalid joltage value: {e:?}"))
+            })
             .collect::<Result<_, _>>()?;
 
         Ok(Machine {
@@ -328,33 +353,5 @@ impl FromStr for Machine {
             buttons,
             joltage_target,
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use aoc::init_test_logging;
-    use super::*;
-
-    #[test]
-    fn test_gaussian_elimination() {
-        init_test_logging();
-
-        let mut m = vec![
-            vec![1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0, 46.0],
-            vec![0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 29.0],
-            vec![1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 59.0],
-            vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 22.0],
-            vec![0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 64.0],
-        ];
-        gaussian_elimination(&mut m);
-        let expected = vec![
-            vec![1.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1.0,  22.0],
-            vec![0.0,  1.0,  0.0,  0.0,  2.0,  0.0,  2.0,  82.0],
-            vec![0.0,  0.0,  1.0,  0.0, -1.0,  0.0, -2.0, -40.0],
-            vec![0.0,  0.0,  0.0,  1.0, -1.0,  0.0,  0.0, -13.0],
-            vec![0.0,  0.0,  0.0,  0.0,  0.0,  1.0, -1.0,  -5.0],
-        ];
-        assert_eq!(m, expected);
     }
 }

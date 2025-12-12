@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-aoc = { path = "../aoc" }
+aoc = { git = "https://github.com/juggernaut0/aoc", branch = "2025" }
 log = "0.4.28"
 num-rational = "0.4.2"
